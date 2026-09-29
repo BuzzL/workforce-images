@@ -12,7 +12,6 @@ expect_version() { # <name> <expected> <actual output>
 : "${UV_VERSION:?}" "${PYTHON_VERSION:?}" "${RUFF_VERSION:?}"
 # Test fixtures only: they are installed by the test, not part of the image.
 PYTEST_VERSION=9.1.1
-PYCOWSAY_VERSION=0.0.0.2
 
 expect_version uv "${UV_VERSION}" "$(uv --version)"
 expect_version python3 "${PYTHON_VERSION}" "$(python3 --version)"
@@ -50,10 +49,10 @@ ruff check --quiet .
 ruff format --check --quiet .
 echo "ok  uv project with pytest on the image's Python"
 
-# uv tools install for dev and are on PATH.
-uv tool install --quiet "pycowsay==${PYCOWSAY_VERSION}"
-[[ "$(command -v pycowsay)" == "$HOME/.local/bin/pycowsay" ]] || fail "uv tool not on PATH"
-pycowsay moo >/dev/null
+# uv tools install for dev and are on PATH (the project's own console script).
+uv tool install --quiet "$project"
+[[ "$(command -v smoke)" == "$HOME/.local/bin/smoke" ]] || fail "uv tool not on PATH"
+smoke >/dev/null
 echo "ok  uv tool install"
 
 echo "python: ok"

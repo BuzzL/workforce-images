@@ -27,7 +27,7 @@ USER 0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /tmp/install
 
-# uv and ruff: static binaries from their GitHub releases.
+# uv and ruff: prebuilt (glibc) binaries from their GitHub releases.
 RUN case "${TARGETARCH}" in \
         amd64) arch=x86_64; uv_sha="${UV_SHA256_AMD64}"; ruff_sha="${RUFF_SHA256_AMD64}" ;; \
         arm64) arch=aarch64; uv_sha="${UV_SHA256_ARM64}"; ruff_sha="${RUFF_SHA256_ARM64}" ;; \

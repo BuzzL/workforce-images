@@ -18,11 +18,11 @@ Developer container images (base, python, java) for AI Workforce agents running 
   - `npm -g` installs to `~/.npm-global`, which comes **last** on PATH so it can't shadow system tools.
   - Claude Code cannot update itself, neither in the background nor with `claude update`. `DISABLE_AUTOUPDATER` and `DISABLE_UPDATES` are set both as env vars and in root-owned `/etc/claude-code/managed-settings.json`, which wins over any environment override.
 - `images/python`: FROM base (`BASE_IMAGE` build arg, **no default**, so a build never resolves a name on Docker Hub). It adds:
-  - uv and ruff as static binaries in `/usr/local/bin`
+  - uv and ruff as prebuilt binaries in `/usr/local/bin`
   - a uv-managed CPython, root-owned under `/opt/uv/python` and linked as `python`, `python3` and `python3.X` in `/usr/local/bin`, ahead of Ubuntu's `/usr/bin/python3`
   - `UV_PYTHON_DOWNLOADS=manual`, so agents stay on the image's Python unless they explicitly run `uv python install`
   - `~/.local/bin` (uv tools) appended to PATH
-  pytest is **not** global: projects add it as a dev dependency (`uv add --dev pytest`) so it can import the project.
+  - pytest is **not** global: projects add it as a dev dependency (`uv add --dev pytest`) so it can import the project.
 - Child images re-assert the base guarantees: CI runs the base smoke test in every image, then the image's own.
 - `.hadolint.yaml`: lint config with `failure-threshold: style`, the same as CI, so any finding fails.
 

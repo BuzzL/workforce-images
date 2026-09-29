@@ -46,6 +46,9 @@ npm install --global --silent --no-audit --no-fund is-number@7.0.0
 [[ ":$PATH:" == *":$HOME/.npm-global/bin:"* ]] || fail "~/.npm-global/bin not on PATH"
 # User-writable bin dirs come after every system dir, so they cannot shadow
 # system tools.
+[[ -n "$HOME" && "$HOME" != / ]] || fail "HOME must be a real directory, got '$HOME'"
+[[ "$PATH" != :* && "$PATH" != *: && "$PATH" != *::* ]] \
+  || fail "PATH has an empty entry (current directory): $PATH"
 seen_user_dir=false
 IFS=: read -ra path_entries <<< "$PATH"
 for entry in "${path_entries[@]}"; do

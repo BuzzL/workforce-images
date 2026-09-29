@@ -14,6 +14,8 @@ Developer container images for the AI Workforce. The same images serve two consu
 | `python` | `base` + uv, uv-managed CPython, ruff (pytest comes from each project's dev dependencies) |
 | `java` | `base` + Temurin JDK, Maven, Gradle |
 
+In the `python` image, uv won't download another Python on its own (`UV_PYTHON_DOWNLOADS=manual`). If a project needs a different version, run `uv python install <version>` once. It installs into your home directory.
+
 > **Status:** early skeleton. See the [commit history](https://github.com/BuzzL/workforce-images/commits/main) for what exists so far.
 
 ## The AI Workforce repositories
