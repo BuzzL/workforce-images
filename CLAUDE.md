@@ -1,6 +1,6 @@
 # workforce-images
 
-Developer container images (base, python, java) for AI Workforce agents running on ECS and for human devcontainers. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
+Developer container images (base, python) for AI Workforce agents running on ECS and for human devcontainers. Cross-repo context lives in the workspace `CLAUDE.md` one level up, when it's present.
 
 ## Rules
 
