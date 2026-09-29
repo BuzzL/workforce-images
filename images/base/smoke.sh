@@ -22,9 +22,10 @@ expect_version claude "${CLAUDE_CODE_VERSION}" "$(claude --version)"
 expect_version pre-commit "${PRE_COMMIT_VERSION}" "$(pre-commit --version)"
 
 # System tools run.
-for tool in git jq make curl unzip python3 npm; do
+for tool in git jq make curl python3 npm; do
   "$tool" --version >/dev/null 2>&1 || fail "$tool missing or broken"
 done
+unzip -v >/dev/null || fail "unzip missing or broken"
 ssh -V 2>/dev/null || fail "ssh missing or broken"
 echo "ok  system tools"
 
