@@ -11,7 +11,7 @@ ARG TERRAFORM_VERSION=1.16.4
 ARG AWSCLI_VERSION=2.37.5
 ARG CLAUDE_CODE_VERSION=2.1.284
 ARG PRE_COMMIT_VERSION=4.6.2
-ARG USERNAME=dev
+ARG DEV_USER=dev
 ARG USER_UID=1000
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -69,16 +69,17 @@ RUN python3 -m venv /opt/pre-commit \
 
 # Claude Code. Updates come from rebuilding this image, not from self-update.
 ENV DISABLE_AUTOUPDATER=1
-RUN npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
+        "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force
 
 # Unprivileged user (no sudo). Ubuntu ships a default "ubuntu" user on UID 1000.
 RUN userdel --remove ubuntu 2>/dev/null || true \
-    && useradd --create-home --shell /bin/bash --uid "${USER_UID}" "${USERNAME}"
+    && useradd --create-home --shell /bin/bash --uid "${USER_UID}" "${DEV_USER}"
 
-USER ${USERNAME}
-ENV NPM_CONFIG_PREFIX=/home/${USERNAME}/.npm-global \
-    PATH=/home/${USERNAME}/.npm-global/bin:${PATH}
-WORKDIR /home/${USERNAME}
+USER ${DEV_USER}
+ENV NPM_CONFIG_PREFIX=/home/${DEV_USER}/.npm-global \
+    PATH=/home/${DEV_USER}/.npm-global/bin:${PATH}
+WORKDIR /home/${DEV_USER}
 
 CMD ["bash"]
