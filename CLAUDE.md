@@ -12,4 +12,11 @@ Developer container images (base, python, java) for AI Workforce agents running 
 
 ## Layout
 
-_Skeleton in progress: images are added commit by commit._
+- `images/<name>/Dockerfile` has one image per folder, with its `smoke.sh` next to it. The smoke test runs inside the built image in CI.
+- `images/base`: Ubuntu 26.04, non-root user `dev` (UID 1000, **no sudo**), with Node LTS, gh, Terraform, AWS CLI v2, pre-commit and Claude Code (auto-update disabled; bump `CLAUDE_CODE_VERSION`).
+- Tool versions are `ARG`s at the top of each Dockerfile. Downloads are sha256-verified where the vendor publishes checksums.
+- `.hadolint.yaml`: lint config; CI fails on warnings.
+
+## Testing without local Docker
+
+Push the branch and let CI run: `hadolint` lints every Dockerfile, and `images` builds each image and runs its smoke test.

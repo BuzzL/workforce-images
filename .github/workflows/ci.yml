@@ -22,3 +22,22 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  hadolint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hadolint/hadolint-action@v3.5.0
+        with:
+          recursive: true
+          config: .hadolint.yaml
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build base
+        run: docker buildx build --load --tag workforce-images/base:ci images/base
+      - name: Smoke test base
+        run: docker run --rm -v "$PWD/images/base/smoke.sh:/smoke.sh:ro" workforce-images/base:ci sh /smoke.sh

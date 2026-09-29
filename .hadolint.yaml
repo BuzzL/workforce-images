@@ -1,0 +1,5 @@
+failure-threshold: warning
+ignored:
+  # Ubuntu packages come from a dated base image tag; tool versions that
+  # matter are pinned with ARGs instead of apt pins.
+  - DL3008
