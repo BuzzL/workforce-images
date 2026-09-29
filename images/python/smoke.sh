@@ -27,11 +27,11 @@ echo "ok  uv-managed python and tools read-only"
 
 # End to end: a project with pytest as a dev dependency, on the image's Python.
 project="$(mktemp -d)/smoke"
-uv init --quiet --no-readme --python "${PYTHON_VERSION}" "$project"
+uv init --quiet --package --no-readme --python "${PYTHON_VERSION}" "$project"
 cd "$project"
 uv add --quiet --dev "pytest==${PYTEST_VERSION}"
 mkdir tests
-printf 'from main import main\n\n\ndef test_main():\n    main()\n' > tests/test_main.py
+printf 'from smoke import main\n\n\ndef test_main():\n    main()\n' > tests/test_main.py
 uv run --quiet python -m pytest -q -p no:cacheprovider tests
 expect_version pytest "${PYTEST_VERSION}" "$(uv run --quiet python -m pytest --version)"
 expect_version "project python" "${PYTHON_VERSION}" "$(uv run --quiet python --version)"

@@ -18,7 +18,7 @@ ARG RUFF_VERSION=0.16.9
 
 LABEL org.opencontainers.image.description="AI Workforce Python developer image"
 
-USER root
+USER 0
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 WORKDIR /tmp/install
 
@@ -47,5 +47,6 @@ RUN export UV_PYTHON_INSTALL_DIR=/opt/uv/python UV_TOOL_DIR=/opt/uv/tools \
     && uv tool install --python "${PYTHON_VERSION}" "ruff==${RUFF_VERSION}" \
     && rm -rf /tmp/uv-cache /tmp/install
 
-USER dev
+# Back to dev (UID:GID from the base image).
+USER 1000:1000
 WORKDIR /home/dev
