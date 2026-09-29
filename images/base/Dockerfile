@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Base developer image for AI Workforce agents (ECS) and human devcontainers.
 # Every downloaded tool is pinned by version AND by per-arch SHA256 below, so
 # this reviewed file (not the download server) is the trust anchor.
