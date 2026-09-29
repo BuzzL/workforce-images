@@ -16,18 +16,18 @@ Developer container images (base, python, java) for AI Workforce agents running 
 - `images/base`: Ubuntu 26.04 (pinned by digest), with Node LTS, gh, Terraform, AWS CLI v2, pre-commit, Claude Code, and `tini` as PID 1.
   - Runs as the unprivileged user `dev` (UID/GID 1000) with **no sudo**.
   - `npm -g` installs to `~/.npm-global`, which comes **last** on PATH so it can't shadow system tools.
-  - Claude Code self-update is disabled through the env var and root-owned `/etc/claude-code/managed-settings.json`.
-- `.hadolint.yaml`: lint config. The CI action fails on any finding.
+  - Claude Code cannot update itself, neither in the background nor with `claude update`. `DISABLE_AUTOUPDATER` and `DISABLE_UPDATES` are set both as env vars and in root-owned `/etc/claude-code/managed-settings.json`, which wins over any environment override.
+- `.hadolint.yaml`: lint config with `failure-threshold: style`, the same as CI, so any finding fails.
 
 ## Pinning (supply chain)
 
 - Every downloaded tool has a version `ARG` plus `*_SHA256_AMD64` / `*_SHA256_ARM64` ARGs. The **Dockerfile is the trust anchor**: to bump a tool, update the version and both hashes in the same commit. Take the hashes from the vendor checksum file or by hashing the artifact, and state the source in the PR.
 - The base image is pinned by tag **and** digest, and Dependabot bumps it.
-- Not yet pinned by hash: apt packages (they come from the digest-pinned base) and pre-commit's pip dependencies (tracked in an issue).
+- Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible) and pre-commit's pip dependencies (issue #2). Automated bumps of ARG pins: issue #3.
 
 ## Consumers
 
-- **ECS agents**: `tini` handles signals and reaping, so the task definition doesn't need `initProcessEnabled`.
+- **ECS agents**: `tini -g` handles reaping and forwards SIGTERM to the whole process group, so the task definition doesn't need `initProcessEnabled`.
 - **Devcontainers**: features run as root at build time, so they work. A `postCreateCommand` runs as `dev` and **cannot use apt**. Don't add the `common-utils` feature, because it would re-introduce sudo.
 
 ## Testing without local Docker

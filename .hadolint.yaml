@@ -1,5 +1,6 @@
-# The failure threshold is set on the CI action (it overrides this file).
+# Same threshold as CI, so local and pre-commit runs agree.
+failure-threshold: style
 ignored:
-  # Ubuntu packages come from a digest-pinned base image; the tools that
-  # matter are pinned by version and SHA256 with ARGs instead of apt pins.
+  # apt packages are GPG-verified by apt but not version-pinned; the tools
+  # that matter are pinned by version and SHA256 with ARGs instead.
   - DL3008

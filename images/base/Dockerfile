@@ -65,7 +65,6 @@ RUN case "${TARGETARCH}" in \
     && curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/${file}" \
     && echo "${sha}  ${file}" | sha256sum -c - \
     && tar -xJf "${file}" -C /usr/local --strip-components=1 --no-same-owner \
-        --exclude='*/CHANGELOG.md' --exclude='*/README.md' --exclude='*/LICENSE' \
     && rm "${file}"
 
 # GitHub CLI
@@ -109,15 +108,16 @@ RUN python3 -m venv /opt/pre-commit \
     && /opt/pre-commit/bin/pip install --no-cache-dir "pre-commit==${PRE_COMMIT_VERSION}" \
     && ln -s /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit
 
-# Claude Code. Updates come from rebuilding this image, never from self-update:
-# the env var covers the default, the root-owned managed settings cover
-# sessions that override the environment.
-ENV DISABLE_AUTOUPDATER=1
+# Claude Code. Updates come from rebuilding this image only: DISABLE_UPDATES
+# blocks manual `claude update`/`install`, DISABLE_AUTOUPDATER background ones.
+# The root-owned managed settings win over any environment override.
+ENV DISABLE_AUTOUPDATER=1 \
+    DISABLE_UPDATES=1
 RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
         "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force \
     && mkdir -p /etc/claude-code \
-    && echo '{"env":{"DISABLE_AUTOUPDATER":"1"}}' > /etc/claude-code/managed-settings.json
+    && echo '{"env":{"DISABLE_AUTOUPDATER":"1","DISABLE_UPDATES":"1"}}' > /etc/claude-code/managed-settings.json
 
 # Unprivileged user (no sudo). Ubuntu ships a default "ubuntu" user on UID 1000.
 WORKDIR /
@@ -134,7 +134,8 @@ USER ${DEV_USER}
 ENV PATH=${PATH}:/home/${DEV_USER}/.npm-global/bin
 WORKDIR /home/${DEV_USER}
 
-# tini as PID 1: reaps the many child processes agents spawn and forwards
-# SIGTERM so an ECS task stop can shut down cleanly.
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# tini as PID 1: reaps the many child processes agents spawn, and (-g) forwards
+# SIGTERM to the whole process group so an ECS task stop shuts down cleanly
+# even when the command is a shell wrapping the agent.
+ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["bash"]
