@@ -1,0 +1,37 @@
+# pre-commit and its complete dependency set, hash-pinned. The base image
+# installs it with: pip install --require-hashes --no-deps --only-binary :all:
+# and verifies it with `pip check`, so a missing or extra dependency fails
+# the build.
+#
+# Target: Ubuntu's /usr/bin/python3 in the base image (CPython 3.14) on
+# linux x86_64 and aarch64. Only wheels are pinned: pure-Python
+# py3-none-any wheels, plus PyYAML's cp314 manylinux wheels for both arches.
+#
+# To update: bump the versions, then take each wheel's sha256 from PyPI
+# (https://pypi.org/pypi/<name>/<version>/json, digests.sha256). Or run in the
+# python image:
+#   uv pip compile --universal --generate-hashes --only-binary :all: \
+#     --python-version 3.14 requirements.in
+# where requirements.in contains just the pre-commit==<version> line.
+# Keep PRE_COMMIT_VERSION in the Dockerfile equal to the pre-commit pin below.
+cfgv==3.5.0 \
+    --hash=sha256:a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0
+distlib==0.4.3 \
+    --hash=sha256:4b0ce306c966eb73bc3a7b6abad017c556dadd92c44701562cd528ac7fde4d5b
+filelock==4.0.6 \
+    --hash=sha256:9b139fb93b2ac5807f7feaf63aa4546fbd74074a2d3f554c040f40a4694d7b9f
+identify==2.6.20 \
+    --hash=sha256:6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa
+nodeenv==1.11.0 \
+    --hash=sha256:edaa16e6c14d7cf395d75d4bbd5a26390f4dc06501a33b4e76282b02cc688a25
+platformdirs==4.12.1 \
+    --hash=sha256:7f251621befae78b2cb74616f9fc99d3fa3db0afba5035987731f8dcd430337d
+pre-commit==4.6.2 \
+    --hash=sha256:e2dde9a75d3bce11bd3831c26d134df00a2803c1d818be6a0383c3dcda25dc4e
+python-discovery==1.6.1 \
+    --hash=sha256:d43fcdef879fe795352bd13ccf8d185ba5a9f86f36cfcd00529f596e737442b3
+pyyaml==6.0.3 \
+    --hash=sha256:501a031947e3a9025ed4405a168e6ef5ae3126c59f90ce0cd6f2bfc477be31b7 \
+    --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5
+virtualenv==21.13.0 \
+    --hash=sha256:ca16ceba89e58d8e2f376769349c63f3ed66f79881ae68bc13e19a9d50e0e987

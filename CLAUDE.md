@@ -31,7 +31,8 @@ Developer container images (base, python) for AI Workforce agents running on ECS
 - Every downloaded tool has a version `ARG` plus `*_SHA256_AMD64` / `*_SHA256_ARM64` ARGs. The one exception is CPython in the python image: uv downloads it and verifies it against the SHA256 embedded in the pinned uv release. The **Dockerfile is the trust anchor**: to bump a tool, update the version and both hashes in the same commit. Take the hashes from the vendor checksum file or by hashing the artifact, and state the source in the PR.
 - The base image is pinned by tag **and** digest, and Dependabot bumps it.
 - No `# syntax=` directive: it would pull an unpinned BuildKit frontend from Docker Hub on every build.
-- Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible) and pre-commit's pip dependencies (issue #2). Automated bumps of ARG pins: issue #3.
+- pre-commit and its complete dependency set are hash-pinned in `images/base/requirements/pre-commit.txt` (wheels only). They are installed with `--require-hashes --no-deps --only-binary :all:` and verified with `pip check`. The file header explains how to update it. `PRE_COMMIT_VERSION` must match it, or the build fails.
+- Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible). Automated bumps of ARG pins: issue #3.
 
 ## Consumers
 

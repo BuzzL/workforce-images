@@ -20,6 +20,8 @@ expect_version terraform "v${TERRAFORM_VERSION}" "$(terraform version)"
 expect_version aws "aws-cli/${AWSCLI_VERSION}" "$(aws --version)"
 expect_version claude "${CLAUDE_CODE_VERSION}" "$(claude --version)"
 expect_version pre-commit "${PRE_COMMIT_VERSION}" "$(pre-commit --version)"
+/opt/pre-commit/bin/pip check >/dev/null || fail "pre-commit venv has inconsistent dependencies"
+echo "ok  pre-commit dependencies consistent"
 
 # System tools run.
 for tool in git jq make curl python3 npm; do
