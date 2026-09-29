@@ -1,16 +1,58 @@
-#!/bin/sh
-# Smoke test: every tool in the base image runs, as the unprivileged user.
-set -eu
+#!/usr/bin/env bash
+# Smoke test for the base image. Runs inside the container as its default
+# user. Expected versions come from the Dockerfile ARGs via environment
+# variables (see the images job in .github/workflows/ci.yml).
+set -euo pipefail
 
-test "$(id -un)" = dev
-git --version
-gh --version | head -n 1
-jq --version
-make --version | head -n 1
-node --version
-npm --version
-claude --version
-aws --version
-terraform version | head -n 1
-pre-commit --version
+fail() { echo "FAIL: $*" >&2; exit 1; }
+expect_version() { # <name> <expected> <actual output>
+  [[ "$3" == *"$2"* ]] || fail "$1: expected $2, got: $3"
+  echo "ok  $1 $2"
+}
+
+: "${NODE_VERSION:?}" "${GH_VERSION:?}" "${TERRAFORM_VERSION:?}" "${AWSCLI_VERSION:?}"
+: "${CLAUDE_CODE_VERSION:?}" "${PRE_COMMIT_VERSION:?}"
+
+# Pinned tools, at the pinned versions.
+expect_version node "v${NODE_VERSION}" "$(node --version)"
+expect_version gh "${GH_VERSION}" "$(gh --version)"
+expect_version terraform "v${TERRAFORM_VERSION}" "$(terraform version)"
+expect_version aws "aws-cli/${AWSCLI_VERSION}" "$(aws --version)"
+expect_version claude "${CLAUDE_CODE_VERSION}" "$(claude --version)"
+expect_version pre-commit "${PRE_COMMIT_VERSION}" "$(pre-commit --version)"
+
+# System tools run.
+for tool in git jq make curl unzip ssh python3 npm; do
+  command -v "$tool" >/dev/null || fail "$tool missing"
+done
+git --version >/dev/null && jq --version >/dev/null && make --version >/dev/null
+python3 --version >/dev/null && ssh -V 2>/dev/null
+echo "ok  system tools"
+
+# Unprivileged user, no sudo, system paths read-only.
+[[ "$(id -un)" == dev && "$(id -u)" == 1000 && "$(id -g)" == 1000 ]] \
+  || fail "unexpected user: $(id)"
+! command -v sudo >/dev/null || fail "sudo must not be installed"
+for dir in /usr/local/bin /usr/local/lib /opt/pre-commit /etc/claude-code; do
+  [[ ! -w "$dir" ]] || fail "$dir is writable by $(id -un)"
+done
+echo "ok  user dev (1000:1000), no sudo, system paths read-only"
+
+# Global npm installs work for dev and cannot shadow system tools.
+npm install --global --silent --no-audit --no-fund is-number@7.0.0
+[[ -f "$HOME/.npm-global/lib/node_modules/is-number/package.json" ]] \
+  || fail "npm -g did not install into ~/.npm-global"
+[[ "$PATH" == *":$HOME/.npm-global/bin" ]] || fail "~/.npm-global/bin must be last on PATH"
+echo "ok  npm -g into ~/.npm-global"
+
+# Claude Code never self-updates.
+[[ "${DISABLE_AUTOUPDATER:-}" == 1 ]] || fail "DISABLE_AUTOUPDATER not set"
+jq -e '.env.DISABLE_AUTOUPDATER == "1"' /etc/claude-code/managed-settings.json >/dev/null \
+  || fail "managed settings do not disable the auto-updater"
+echo "ok  claude auto-update disabled"
+
+# tini is PID 1.
+[[ "$(cat /proc/1/comm)" == tini ]] || fail "PID 1 is $(cat /proc/1/comm), expected tini"
+echo "ok  tini is PID 1"
+
 echo "base: ok"

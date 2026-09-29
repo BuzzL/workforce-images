@@ -1,5 +1,5 @@
-failure-threshold: warning
+# The failure threshold is set on the CI action (it overrides this file).
 ignored:
-  # Ubuntu packages come from a dated base image tag; tool versions that
-  # matter are pinned with ARGs instead of apt pins.
+  # Ubuntu packages come from a digest-pinned base image; the tools that
+  # matter are pinned by version and SHA256 with ARGs instead of apt pins.
   - DL3008
