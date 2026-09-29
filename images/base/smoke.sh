@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Smoke test for the base image. Runs inside the container as its default
+# user. Expected versions come from the Dockerfile ARGs via environment
+# variables (see the images job in .github/workflows/ci.yml).
+set -euo pipefail
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+expect_version() { # <name> <expected> <actual output>
+  [[ "$3" =~ (^|[^0-9.])"$2"($|[^0-9.]) ]] || fail "$1: expected $2, got: $3"
+  echo "ok  $1 $2"
+}
+
+: "${NODE_VERSION:?}" "${GH_VERSION:?}" "${TERRAFORM_VERSION:?}" "${AWSCLI_VERSION:?}"
+: "${CLAUDE_CODE_VERSION:?}" "${PRE_COMMIT_VERSION:?}"
+
+# Pinned tools, at the pinned versions.
+expect_version node "v${NODE_VERSION}" "$(node --version)"
+expect_version gh "${GH_VERSION}" "$(gh --version)"
+expect_version terraform "v${TERRAFORM_VERSION}" "$(terraform version)"
+expect_version aws "aws-cli/${AWSCLI_VERSION}" "$(aws --version)"
+expect_version claude "${CLAUDE_CODE_VERSION}" "$(claude --version)"
+expect_version pre-commit "${PRE_COMMIT_VERSION}" "$(pre-commit --version)"
+
+# System tools run.
+for tool in git jq make curl python3 npm; do
+  "$tool" --version >/dev/null 2>&1 || fail "$tool missing or broken"
+done
+unzip -v >/dev/null || fail "unzip missing or broken"
+ssh -V 2>/dev/null || fail "ssh missing or broken"
+echo "ok  system tools"
+
+# Unprivileged user, no sudo, system paths read-only.
+[[ "$(id -un)" == dev && "$(id -u)" == 1000 && "$(id -g)" == 1000 ]] \
+  || fail "unexpected user: $(id)"
+! command -v sudo >/dev/null || fail "sudo must not be installed"
+for dir in /usr/local/bin /usr/local/lib /opt/pre-commit /etc/claude-code; do
+  [[ -d "$dir" ]] || fail "$dir missing"
+  [[ ! -w "$dir" ]] || fail "$dir is writable by $(id -un)"
+done
+echo "ok  user dev (1000:1000), no sudo, system paths read-only"
+
+# Global npm installs work for dev and cannot shadow system tools.
+npm install --global --silent --no-audit --no-fund is-number@7.0.0
+[[ -f "$HOME/.npm-global/lib/node_modules/is-number/package.json" ]] \
+  || fail "npm -g did not install into ~/.npm-global"
+[[ "$PATH" == *":$HOME/.npm-global/bin" ]] || fail "~/.npm-global/bin must be last on PATH"
+echo "ok  npm -g into ~/.npm-global"
+
+# Claude Code never self-updates.
+[[ "${DISABLE_AUTOUPDATER:-}" == 1 && "${DISABLE_UPDATES:-}" == 1 ]] \
+  || fail "DISABLE_AUTOUPDATER / DISABLE_UPDATES not set"
+jq -e '.env.DISABLE_AUTOUPDATER == "1" and .env.DISABLE_UPDATES == "1"' \
+  /etc/claude-code/managed-settings.json >/dev/null \
+  || fail "managed settings do not disable updates"
+echo "ok  claude updates disabled"
+
+# tini is PID 1.
+[[ "$(cat /proc/1/comm)" == tini ]] || fail "PID 1 is $(cat /proc/1/comm), expected tini"
+echo "ok  tini is PID 1"
+
+echo "base: ok"

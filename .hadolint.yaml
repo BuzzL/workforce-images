@@ -1,0 +1,6 @@
+# Same threshold as CI, so local and pre-commit runs agree.
+failure-threshold: style
+ignored:
+  # apt packages are GPG-verified by apt but not version-pinned; the tools
+  # that matter are pinned by version and SHA256 with ARGs instead.
+  - DL3008
