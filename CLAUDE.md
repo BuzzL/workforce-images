@@ -17,12 +17,20 @@ Developer container images (base, python, java) for AI Workforce agents running 
   - Runs as the unprivileged user `dev` (UID/GID 1000) with **no sudo**.
   - `npm -g` installs to `~/.npm-global`, which comes **last** on PATH so it can't shadow system tools.
   - Claude Code cannot update itself, neither in the background nor with `claude update`. `DISABLE_AUTOUPDATER` and `DISABLE_UPDATES` are set both as env vars and in root-owned `/etc/claude-code/managed-settings.json`, which wins over any environment override.
+- `images/python`: FROM base (`BASE_IMAGE` build arg, **no default**, so a build never resolves a name on Docker Hub). It adds:
+  - uv and ruff as prebuilt binaries in `/usr/local/bin`
+  - a uv-managed CPython, root-owned under `/opt/uv/python` and linked as `python`, `python3` and `python3.X` in `/usr/local/bin`, ahead of Ubuntu's `/usr/bin/python3`
+  - `UV_PYTHON_DOWNLOADS=manual`, so agents stay on the image's Python unless they explicitly run `uv python install`
+  - `~/.local/bin` (uv tools) appended to PATH
+  - pytest is **not** global: projects add it as a dev dependency (`uv add --dev pytest`) so it can import the project.
+- Child images re-assert the base guarantees: CI runs the base smoke test in every image, then the image's own.
 - `.hadolint.yaml`: lint config with `failure-threshold: style`, the same as CI, so any finding fails.
 
 ## Pinning (supply chain)
 
-- Every downloaded tool has a version `ARG` plus `*_SHA256_AMD64` / `*_SHA256_ARM64` ARGs. The **Dockerfile is the trust anchor**: to bump a tool, update the version and both hashes in the same commit. Take the hashes from the vendor checksum file or by hashing the artifact, and state the source in the PR.
+- Every downloaded tool has a version `ARG` plus `*_SHA256_AMD64` / `*_SHA256_ARM64` ARGs. The one exception is CPython in the python image: uv downloads it and verifies it against the SHA256 embedded in the pinned uv release. The **Dockerfile is the trust anchor**: to bump a tool, update the version and both hashes in the same commit. Take the hashes from the vendor checksum file or by hashing the artifact, and state the source in the PR.
 - The base image is pinned by tag **and** digest, and Dependabot bumps it.
+- No `# syntax=` directive: it would pull an unpinned BuildKit frontend from Docker Hub on every build.
 - Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible) and pre-commit's pip dependencies (issue #2). Automated bumps of ARG pins: issue #3.
 
 ## Consumers
@@ -34,4 +42,4 @@ Developer container images (base, python, java) for AI Workforce agents running 
 
 Push the branch and let CI run:
 - `hadolint` lints every Dockerfile.
-- `images (amd64)` and `images (arm64)` build on native runners and run `smoke.sh`. It checks the pinned versions (read from the ARGs), the user, the absence of sudo, read-only system paths, `npm -g`, the auto-update lock and tini.
+- `images (amd64)` and `images (arm64)` build base then python on native runners with the default docker builder (child images build `FROM` the locally loaded base), then run the smoke tests. The python image runs both the base and the python smoke test. The python one checks exact versions, read-only `/opt/uv` and site-packages, `UV_PYTHON_DOWNLOADS`, a packaged uv project with pytest on the image's Python (downloads forced off), and `uv tool install`. It checks the pinned versions (read from the ARGs), the user, the absence of sudo, read-only system paths, `npm -g`, the auto-update lock and tini.

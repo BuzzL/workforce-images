@@ -47,13 +47,27 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v4
+      # The default docker builder is used on purpose: child images build
+      # FROM the locally loaded base image.
       - name: Build base
-        run: docker buildx build --load --tag workforce-images/base:ci images/base
-      - name: Smoke test base
+        run: docker build --tag workforce-images/base:ci images/base
+      - name: Build python
+        run: docker build --build-arg BASE_IMAGE=workforce-images/base:ci --tag workforce-images/python:ci images/python
+      - name: Smoke test
         run: |
-          # Expected versions are the Dockerfile's ARG defaults.
-          mapfile -t versions < <(sed -nE 's/^ARG ([A-Z_]+_VERSION)=(.+)$/--env=\1=\2/p' images/base/Dockerfile)
-          docker run --rm "${versions[@]}" \
-            -v "$PWD/images/base/smoke.sh:/smoke.sh:ro" \
-            workforce-images/base:ci bash /smoke.sh
+          # smoke <image> <dockerfile>... : run each image's smoke test
+          # with the expected versions taken from the Dockerfiles' ARGs.
+          smoke() {
+            local image=$1; shift
+            local -a env=() mounts=() cmds=()
+            for dockerfile in "$@"; do
+              local dir; dir=$(dirname "$dockerfile"); local name; name=$(basename "$dir")
+              mapfile -t -O "${#env[@]}" env < <(sed -nE 's/^ARG ([A-Z_]+_VERSION)=(.+)$/--env=\1=\2/p' "$dockerfile")
+              mounts+=(-v "$PWD/$dir/smoke.sh:/smoke/$name.sh:ro")
+              cmds+=("bash /smoke/$name.sh")
+            done
+            local joined; joined=$(printf '%s && ' "${cmds[@]}")
+            docker run --rm "${env[@]}" "${mounts[@]}" "$image" bash -c "${joined% && }"
+          }
+          smoke workforce-images/base:ci images/base/Dockerfile
+          smoke workforce-images/python:ci images/base/Dockerfile images/python/Dockerfile

@@ -43,8 +43,22 @@ echo "ok  user dev (1000:1000), no sudo, system paths read-only"
 npm install --global --silent --no-audit --no-fund is-number@7.0.0
 [[ -f "$HOME/.npm-global/lib/node_modules/is-number/package.json" ]] \
   || fail "npm -g did not install into ~/.npm-global"
-[[ "$PATH" == *":$HOME/.npm-global/bin" ]] || fail "~/.npm-global/bin must be last on PATH"
-echo "ok  npm -g into ~/.npm-global"
+[[ ":$PATH:" == *":$HOME/.npm-global/bin:"* ]] || fail "~/.npm-global/bin not on PATH"
+# User-writable bin dirs come after every system dir, so they cannot shadow
+# system tools.
+[[ -n "$HOME" && "$HOME" != / ]] || fail "HOME must be a real directory, got '$HOME'"
+[[ "$PATH" != :* && "$PATH" != *: && "$PATH" != *::* ]] \
+  || fail "PATH has an empty entry (current directory): $PATH"
+seen_user_dir=false
+IFS=: read -ra path_entries <<< "$PATH"
+for entry in "${path_entries[@]}"; do
+  if [[ "$entry" == "$HOME"/* ]]; then
+    seen_user_dir=true
+  elif [[ "$seen_user_dir" == true ]]; then
+    fail "system dir $entry comes after a user dir on PATH: $PATH"
+  fi
+done
+echo "ok  npm -g into ~/.npm-global; user bin dirs after system dirs"
 
 # Claude Code never self-updates.
 [[ "${DISABLE_AUTOUPDATER:-}" == 1 && "${DISABLE_UPDATES:-}" == 1 ]] \
