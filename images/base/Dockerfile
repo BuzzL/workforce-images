@@ -102,9 +102,15 @@ RUN case "${TARGETARCH}" in \
     && ./aws/install \
     && rm -rf aws awscliv2.zip
 
-# pre-commit, in its own virtualenv
-RUN python3 -m venv /opt/pre-commit \
-    && /opt/pre-commit/bin/pip install --no-cache-dir "pre-commit==${PRE_COMMIT_VERSION}" \
+# pre-commit, in its own virtualenv, with its whole dependency set pinned by
+# hash in requirements/pre-commit.txt (wheels only, no dependency resolution).
+COPY requirements/pre-commit.txt /tmp/install/pre-commit.txt
+RUN grep -q "^pre-commit==${PRE_COMMIT_VERSION} " /tmp/install/pre-commit.txt \
+        || { echo "PRE_COMMIT_VERSION=${PRE_COMMIT_VERSION} does not match requirements/pre-commit.txt" >&2; exit 1; } \
+    && python3 -m venv /opt/pre-commit \
+    && /opt/pre-commit/bin/pip install --no-cache-dir --require-hashes --no-deps --only-binary :all: \
+        -r /tmp/install/pre-commit.txt \
+    && /opt/pre-commit/bin/pip check \
     && ln -s /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit
 
 # Claude Code. Updates come from rebuilding this image only: DISABLE_UPDATES
