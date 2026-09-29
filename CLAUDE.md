@@ -17,6 +17,8 @@ Developer container images (base, python, java) for AI Workforce agents running 
   - Runs as the unprivileged user `dev` (UID/GID 1000) with **no sudo**.
   - `npm -g` installs to `~/.npm-global`, which comes **last** on PATH so it can't shadow system tools.
   - Claude Code cannot update itself, neither in the background nor with `claude update`. `DISABLE_AUTOUPDATER` and `DISABLE_UPDATES` are set both as env vars and in root-owned `/etc/claude-code/managed-settings.json`, which wins over any environment override.
+- `images/python`: FROM base (`BASE_IMAGE` build arg), with uv, a uv-managed CPython (`python`, `python3`, `python3.X` in `/usr/local/bin`) and ruff, all root-owned under `/opt/uv`. pytest is **not** global: projects add it as a dev dependency (`uv add --dev pytest`) so it can import the project.
+- Child images re-assert the base guarantees: CI runs the base smoke test in every image, then the image's own.
 - `.hadolint.yaml`: lint config with `failure-threshold: style`, the same as CI, so any finding fails.
 
 ## Pinning (supply chain)
@@ -34,4 +36,4 @@ Developer container images (base, python, java) for AI Workforce agents running 
 
 Push the branch and let CI run:
 - `hadolint` lints every Dockerfile.
-- `images (amd64)` and `images (arm64)` build on native runners and run `smoke.sh`. It checks the pinned versions (read from the ARGs), the user, the absence of sudo, read-only system paths, `npm -g`, the auto-update lock and tini.
+- `images (amd64)` and `images (arm64)` build base then python on native runners with the default docker builder (child images build `FROM` the locally loaded base), and run the smoke tests. It checks the pinned versions (read from the ARGs), the user, the absence of sudo, read-only system paths, `npm -g`, the auto-update lock and tini.
