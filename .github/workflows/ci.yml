@@ -29,6 +29,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Unit tests (offline)
         run: python3 -m unittest discover -s scripts -v
+      - name: App key only via the agent-app environment
+        run: python3 scripts/check_app_key_env.py
       # Live check that every vendor source still answers in the expected
       # format. Proposes nothing and writes nothing.
       - name: Dry run against live sources
