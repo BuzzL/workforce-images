@@ -1,5 +1,5 @@
 # Weekly: find newer versions of the ARG-pinned tools (scripts/bump_pins.py)
-# and open one PR per tool, as the workforce-agent App so the PR runs CI.
+# and open one PR per tool, as the agent App so the PR runs CI.
 # Every bump PR still needs the maintainer's approval to merge.
 name: Bump pins
 

@@ -1,6 +1,15 @@
 # Agent GitHub App key: setup and rotation runbook
 
-The `buzzl-workforce-agent` GitHub App key is used by `Bump pins` (this repo) and `release-please` (`workforce-testbed`). It is an **environment secret** of the GitHub Environment `agent-app`, limited to `main`, so workflows on PR branches cannot read it. There is no repo-level copy. Permissions and storage plan: `workforce-testbed/CLAUDE.md` (section "GitHub App").
+The workforce agent GitHub App key is used by `Bump pins` (this repo) and `release-please` (`workforce-testbed`). It is an **environment secret** of the GitHub Environment `agent-app`, limited to `main`, so workflows on PR branches cannot read it. This is the single place for the App's permissions, key storage and rotation; other repos link here.
+
+## App permissions (minimal)
+
+- Repository permissions: **Contents** write (push branches, tags, releases), **Pull requests** write (open and update PRs), **Checks** read, **Actions** read (runs and logs), **Metadata** read.
+- Not granted: **Workflows** (agent PRs cannot edit `.github/workflows/*`; add it only for a task that needs it), Administration, Environments, Secrets, Variables, Deployments. Checked by hand on 2026-09-30 by probing the API (403 for the missing permissions and for Actions cancel/delete).
+
+## Key storage
+
+The `.pem` lives in a local file and as the `agent-app` environment secret in the repos that use it (`workforce-images`, `workforce-testbed`). At M4 it moves to Secrets Manager in the `workforce` account for the ECS agent tasks (see the end of this document).
 
 Run everything with the maintainer's `gh` login. Never print the key: it is piped from the file. `KEY_FILE` is the local `.pem` (outside every repo) and `CLIENT_ID` the App's client ID (not secret).
 
