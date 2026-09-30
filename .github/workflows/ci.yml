@@ -23,6 +23,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Unit tests (offline)
+        run: python3 -m unittest discover -s scripts -v
+      # Live check that every vendor source still answers in the expected
+      # format. Proposes nothing and writes nothing.
+      - name: Dry run against live sources
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/bump_pins.py --list --min-age-days 7
+
   hadolint:
     runs-on: ubuntu-latest
     steps:

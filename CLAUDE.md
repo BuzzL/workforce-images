@@ -32,7 +32,14 @@ Developer container images (base, python) for AI Workforce agents running on ECS
 - The base image is pinned by tag **and** digest, and Dependabot bumps it.
 - No `# syntax=` directive: it would pull an unpinned BuildKit frontend from Docker Hub on every build.
 - pre-commit and its complete dependency set are hash-pinned in `images/base/requirements/pre-commit.txt` (wheels only). They are installed with `--require-hashes --no-deps --only-binary :all:` and verified with `pip check`. The file header explains how to update it. `PRE_COMMIT_VERSION` must match it, or the build fails.
-- Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible). Automated bumps of ARG pins: issue #3.
+- Not pinned by hash: apt packages (GPG-verified by apt, resolved at build time, so builds aren't bit-reproducible). Automated bumps of ARG pins: see below.
+
+## Automated pin bumps
+
+- `scripts/bump_pins.py` (stdlib only) knows every ARG-pinned tool: node, gh, terraform, awscli, claude-code, uv, ruff and cpython. For each one it finds the latest release, skips releases younger than a **7-day cooldown**, takes the per-arch SHA256 from the vendor's checksum file (AWS CLI: by hashing the artifact) and rewrites the ARGs. node stays on its current major and cpython on its current minor.
+- **`Bump pins` workflow** (weekly on Monday, or on demand with `gh workflow run bump-pins.yml -f min_age_days=N`): opens **one PR per tool** as the workforce-agent App on a `deps/<tool>-<version>` branch. CI tests each PR, and each needs maintainer approval.
+- **Not automated:** pre-commit (bump it by hand together with `images/base/requirements/pre-commit.txt`), and the base image digest (Dependabot).
+- **Tests:** the `scripts` CI job runs the offline unit tests (`python3 -m unittest discover -s scripts`) plus a live `--list` dry run.
 
 ## Consumers
 
