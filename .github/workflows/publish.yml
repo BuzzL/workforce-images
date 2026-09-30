@@ -14,7 +14,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: publish
+  group: publish-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -29,17 +29,35 @@ jobs:
     permissions:
       contents: read
       actions: read
+      packages: read
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Tag is a release version
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$TAG is not vMAJOR.MINOR.PATCH"; exit 1; }
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::$TAG is not vMAJOR.MINOR.PATCH"; exit 1; }
       - name: Tagged commit is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Published versions are immutable: re-running or re-pushing a tag
+      # must not replace X.Y.Z with a different digest.
+      - name: Version is not already published
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          for name in base python; do
+            if docker buildx imagetools inspect "${REGISTRY}/${IMAGE_PREFIX,,}/${name}:${TAG#v}" > /dev/null 2>&1; then
+              echo "::error::${name}:${TAG#v} is already published"; exit 1
+            fi
+          done
       - name: CI passed on the tagged commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,19 +82,22 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Image name
         run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/base" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: ${{ env.IMAGE }}
-      - uses: docker/build-push-action@v7
+          tags: type=semver,pattern={{version}}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         id: build
         with:
           context: images/base
@@ -89,7 +110,14 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/digests"
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-      - uses: actions/upload-artifact@v7
+      # Nothing is tagged until this arch's pushed image passes the smoke tests.
+      - name: Smoke test the pushed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "${IMAGE}@${DIGEST}"
+          .github/scripts/smoke.sh "${IMAGE}@${DIGEST}" images/base/Dockerfile
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digests-base-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -106,21 +134,22 @@ jobs:
     steps:
       - name: Image name
         run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/base" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-base-*
           merge-multiple: true
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -157,19 +186,22 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Image name
         run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/python" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: ${{ env.IMAGE }}
-      - uses: docker/build-push-action@v7
+          tags: type=semver,pattern={{version}}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         id: build
         with:
           context: images/python
@@ -183,7 +215,14 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/digests"
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
-      - uses: actions/upload-artifact@v7
+      # Nothing is tagged until this arch's pushed image passes the smoke tests.
+      - name: Smoke test the pushed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "${IMAGE}@${DIGEST}"
+          .github/scripts/smoke.sh "${IMAGE}@${DIGEST}" images/base/Dockerfile images/python/Dockerfile
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digests-python-${{ matrix.arch }}
           path: ${{ runner.temp }}/digests/*
@@ -200,21 +239,22 @@ jobs:
     steps:
       - name: Image name
         run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/python" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-python-*
           merge-multiple: true
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v6
+      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         id: meta
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -252,6 +292,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Pull and smoke test
         env:
           REF: ${{ matrix.image == 'base' && needs.base-merge.outputs.ref || needs.python-merge.outputs.ref }}
