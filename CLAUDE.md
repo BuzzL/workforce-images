@@ -43,7 +43,7 @@ Developer container images (base, python) for AI Workforce agents running on ECS
 
 ## Publishing
 
-- `.github/workflows/publish.yml` runs on a `vX.Y.Z` tag. It refuses tags whose commit is not on `main` or has no green CI run, builds each image per arch on native runners, pushes by digest, and merges the digests into a multi-arch tag set (`X.Y.Z`, `X.Y`, `X`, `sha-<short>`) on `ghcr.io/buzzl/workforce-images/<name>`.
+- `.github/workflows/publish.yml` runs on a `vX.Y.Z` tag. It refuses tags whose commit is not on `main` or has no green CI run, builds each image per arch on native runners, pushes by digest, and smoke-tests each pushed digest, then merges the digests into a multi-arch tag set (`X.Y.Z`, `X.Y`, `X`, `sha-<short>`, no `latest`; it refuses a version that is already published) on `ghcr.io/buzzl/workforce-images/<name>`.
 - Authentication is the workflow `GITHUB_TOKEN` (`packages: write` only on the push jobs). No PAT.
 - `python` is built `FROM` the just-published `base`, passed by digest through `BASE_IMAGE`.
 - The `verify` jobs pull each published digest anonymously (so they fail while a package is still private) and run `.github/scripts/smoke.sh`, the same runner CI uses.

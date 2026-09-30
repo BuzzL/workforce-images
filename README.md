@@ -22,7 +22,7 @@ Pushing a `vX.Y.Z` tag on `main` publishes both images, for `linux/amd64` and `l
 - `ghcr.io/buzzl/workforce-images/base`
 - `ghcr.io/buzzl/workforce-images/python`
 
-Tags are `X.Y.Z`, `X.Y`, `X` and `sha-<short>`. Consumers should pin by digest, e.g. in `devcontainer.json`:
+Tags are `X.Y.Z`, `X.Y`, `X` and `sha-<short>`; there is no `latest`. `X.Y.Z` is never republished, and the pushed images are smoke-tested per architecture before any tag is created. Consumers should pin by digest, e.g. in `devcontainer.json`:
 
 ```json
 { "image": "ghcr.io/buzzl/workforce-images/base@sha256:<digest>" }
