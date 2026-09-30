@@ -126,6 +126,9 @@ RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
     && npm cache clean --force \
     && mkdir -p /etc/claude-code \
     && echo '{"env":{"DISABLE_AUTOUPDATER":"1","DISABLE_UPDATES":"1"}}' > /etc/claude-code/managed-settings.json
+# Managed, root-owned instructions that every Claude Code session in the image
+# loads (branch naming). Repos keep their own CLAUDE.md for the rest.
+COPY claude-code/CLAUDE.md /etc/claude-code/CLAUDE.md
 
 # Unprivileged user (no sudo). Ubuntu ships a default "ubuntu" user on UID 1000.
 WORKDIR /

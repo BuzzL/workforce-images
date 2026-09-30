@@ -6,6 +6,7 @@ Developer container images (base, python) for AI Workforce agents running on ECS
 
 - **Commit rule**: every commit is short (one logical change), testable (it comes with the check that proves it: hadolint, build, smoke test) and not breakable (CI green on its own). Conventional Commits.
 - Changes land on `main` only through a squash-merged PR with green CI.
+- **Branches** follow [Conventional Branch](https://conventionalbranch.org/): `<type>/{ticket-id}-{short-summary}`, e.g. `feature/iat-22-publish-images-ghcr`. The type comes from the Linear issue label (`Feature`/`Improvement` give `feature/`, `Bug` gives `bugfix/`) and the ticket key is lowercase. The base image ships this rule in `/etc/claude-code/CLAUDE.md` (source: `images/base/claude-code/CLAUDE.md`), so agents and devcontainers get it.
 - Both consumers must keep working: ECS agent tasks and `devcontainer.json`.
 - Pin tool versions with `ARG`s so updates are explicit and reviewable.
 - Public repo: no secrets, AWS account IDs, emails or ARNs.

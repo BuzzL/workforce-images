@@ -72,6 +72,13 @@ jq -e '.env.DISABLE_AUTOUPDATER == "1" and .env.DISABLE_UPDATES == "1"' \
   || fail "managed settings do not disable updates"
 echo "ok  claude updates disabled"
 
+# Managed instructions state the branch naming rule and cannot be edited by dev.
+[[ "$(stat -c %u:%a /etc/claude-code/CLAUDE.md 2>/dev/null)" == 0:644 ]] \
+  || fail "/etc/claude-code/CLAUDE.md is missing or is not root-owned mode 644"
+grep -qF '<type>/{ticket-id}-{short-summary}' /etc/claude-code/CLAUDE.md \
+  || fail "managed CLAUDE.md does not state the branch naming rule"
+echo "ok  managed CLAUDE.md with branch naming rule"
+
 # tini is PID 1.
 [[ "$(cat /proc/1/comm)" == tini ]] || fail "PID 1 is $(cat /proc/1/comm), expected tini"
 echo "ok  tini is PID 1"
