@@ -1,6 +1,6 @@
 # Agent GitHub App key: setup and rotation runbook
 
-The `buzzl-workforce-agent` GitHub App key is used by `Bump pins` (this repo) and `release-please` (`workforce-testbed`). It is an **environment secret** of the GitHub Environment `agent-app`, limited to `main`, so workflows on PR branches cannot read it. There is no repo-level copy. Permissions and storage plan: `workforce-testbed/CLAUDE.md` (section "GitHub App").
+The agent GitHub App key is used by `Bump pins` (this repo) and `release-please` (`workforce-testbed`). It is an **environment secret** of the GitHub Environment `agent-app`, limited to `main`, so workflows on PR branches cannot read it. There is no repo-level copy. Permissions and storage plan: `workforce-testbed/CLAUDE.md` (section "GitHub App").
 
 Run everything with the maintainer's `gh` login. Never print the key: it is piped from the file. `KEY_FILE` is the local `.pem` (outside every repo) and `CLIENT_ID` the App's client ID (not secret).
 
