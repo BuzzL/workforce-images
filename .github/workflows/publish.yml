@@ -1,0 +1,266 @@
+# Publishes the developer images to public GHCR when a version tag (vX.Y.Z)
+# is pushed, then pulls them back anonymously by digest and smoke-tests them.
+#
+# Each image is built per architecture on a native runner and pushed by
+# digest, then a merge job stitches the digests into one multi-arch tag set.
+# `python` is built FROM the just-published `base`, referenced by digest.
+# Authentication is the workflow GITHUB_TOKEN; there is no PAT.
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # Lowercased in the jobs: GHCR names must be lowercase.
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  # A tag must not publish code that was never reviewed or never passed CI.
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Tag is a release version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::$TAG is not vMAJOR.MINOR.PATCH"; exit 1; }
+      - name: Tagged commit is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - name: CI passed on the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&status=success" --jq .total_count)
+          [ "$passed" -ge 1 ] || { echo "::error::no successful CI run for $GITHUB_SHA"; exit 1; }
+
+  base-build:
+    needs: guard
+    name: base (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Image name
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/base" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: images/base
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-base-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  base-merge:
+    needs: base-build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    outputs:
+      ref: ${{ steps.ref.outputs.ref }}
+    steps:
+      - name: Image name
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/base" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-base-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - name: Create the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
+      - name: Resolve the manifest digest
+        id: ref
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          digest=$(docker buildx imagetools inspect "${IMAGE}:${version}" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "ref=${IMAGE}@${digest}" >> "$GITHUB_OUTPUT"
+
+  python-build:
+    needs: base-merge
+    name: python (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Image name
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/python" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: images/python
+          build-args: BASE_IMAGE=${{ needs.base-merge.outputs.ref }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-python-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  python-merge:
+    needs: python-build
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    outputs:
+      ref: ${{ steps.ref.outputs.ref }}
+    steps:
+      - name: Image name
+        run: echo "IMAGE=${REGISTRY}/${IMAGE_PREFIX,,}/python" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-python-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+      - name: Create the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
+      - name: Resolve the manifest digest
+        id: ref
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          digest=$(docker buildx imagetools inspect "${IMAGE}:${version}" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "ref=${IMAGE}@${digest}" >> "$GITHUB_OUTPUT"
+
+  # Pull what was published, anonymously and by digest (this also proves the
+  # packages are public), and run the same smoke tests CI runs on local builds.
+  verify:
+    needs: [base-merge, python-merge]
+    name: verify ${{ matrix.image }} (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: base, arch: amd64, runner: ubuntu-latest }
+          - { image: base, arch: arm64, runner: ubuntu-24.04-arm }
+          - { image: python, arch: amd64, runner: ubuntu-latest }
+          - { image: python, arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Pull and smoke test
+        env:
+          REF: ${{ matrix.image == 'base' && needs.base-merge.outputs.ref || needs.python-merge.outputs.ref }}
+          IMAGE_NAME: ${{ matrix.image }}
+        run: |
+          docker pull "$REF"
+          if [ "$IMAGE_NAME" = base ]; then
+            .github/scripts/smoke.sh "$REF" images/base/Dockerfile
+          else
+            .github/scripts/smoke.sh "$REF" images/base/Dockerfile images/python/Dockerfile
+          fi
+          echo "$IMAGE_NAME (${{ matrix.arch }}): \`$REF\`" >> "$GITHUB_STEP_SUMMARY"

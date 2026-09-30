@@ -15,6 +15,21 @@ Developer container images for the AI Workforce. The same images serve two consu
 
 In the `python` image, uv won't download another Python on its own (`UV_PYTHON_DOWNLOADS=manual`). If a project needs a different version, run `uv python install <version>` once. It installs into your home directory.
 
+## Using the images
+
+Pushing a `vX.Y.Z` tag on `main` publishes both images, for `linux/amd64` and `linux/arm64`, to public GHCR (`publish` workflow):
+
+- `ghcr.io/buzzl/workforce-images/base`
+- `ghcr.io/buzzl/workforce-images/python`
+
+Tags are `X.Y.Z`, `X.Y`, `X` and `sha-<short>`. Consumers should pin by digest, e.g. in `devcontainer.json`:
+
+```json
+{ "image": "ghcr.io/buzzl/workforce-images/base@sha256:<digest>" }
+```
+
+The workflow prints each published `name@sha256:...` reference in its job summaries, after pulling it anonymously and running the smoke tests against it.
+
 > **Status:** early skeleton. See the [commit history](https://github.com/BuzzL/workforce-images/commits/main) for what exists so far.
 
 ## The AI Workforce repositories
