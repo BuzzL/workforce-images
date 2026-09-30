@@ -1,19 +1,21 @@
-# pre-commit and its complete dependency set, hash-pinned. The base image
-# installs it with: pip install --require-hashes --no-deps --only-binary :all:
-# and verifies it with `pip check`, so a missing or extra dependency fails
-# the build.
+# pre-commit and its complete dependency set, hash-pinned. This file (not
+# the Dockerfile) is the trust anchor for pre-commit. The base image installs
+# it with: pip install --require-hashes --no-deps --only-binary :all:
+# and verifies it with `pip check`, so a missing or conflicting dependency
+# fails the build (an unused extra pin would not; keep the set minimal).
 #
 # Target: Ubuntu's /usr/bin/python3 in the base image (CPython 3.14) on
-# linux x86_64 and aarch64. Only wheels are pinned: pure-Python
-# py3-none-any wheels, plus PyYAML's cp314 manylinux wheels for both arches.
+# linux x86_64 and aarch64; the build refuses any other Python minor. Pinned
+# files: pure-Python py3-none-any wheels, plus PyYAML's cp314 manylinux wheels
+# for both arches.
 #
-# To update: bump the versions, then take each wheel's sha256 from PyPI
-# (https://pypi.org/pypi/<name>/<version>/json, digests.sha256). Or run in the
-# python image:
-#   uv pip compile --universal --generate-hashes --only-binary :all: \
-#     --python-version 3.14 requirements.in
-# where requirements.in contains just the pre-commit==<version> line.
-# Keep PRE_COMMIT_VERSION in the Dockerfile equal to the pre-commit pin below.
+# To update: bump the versions (and PRE_COMMIT_VERSION in the Dockerfile to
+# match), re-resolve the dependency tree for Python 3.14 on Linux, and take
+# each wheel's sha256 from PyPI (https://pypi.org/pypi/<name>/<version>/json,
+# urls[].digests.sha256). Keep only the files listed above. Tools that emit
+# every published hash (e.g. `uv pip compile --generate-hashes`) produce a
+# valid but much larger file; prune it to the files above so reviews stay
+# readable.
 cfgv==3.5.0 \
     --hash=sha256:a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0
 distlib==0.4.3 \

@@ -105,8 +105,11 @@ RUN case "${TARGETARCH}" in \
 # pre-commit, in its own virtualenv, with its whole dependency set pinned by
 # hash in requirements/pre-commit.txt (wheels only, no dependency resolution).
 COPY requirements/pre-commit.txt /tmp/install/pre-commit.txt
-RUN grep -q "^pre-commit==${PRE_COMMIT_VERSION} " /tmp/install/pre-commit.txt \
+RUN awk -v want="pre-commit==${PRE_COMMIT_VERSION}" '$1 == want { found = 1 } END { exit !found }' \
+        /tmp/install/pre-commit.txt \
         || { echo "PRE_COMMIT_VERSION=${PRE_COMMIT_VERSION} does not match requirements/pre-commit.txt" >&2; exit 1; } \
+    && python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 14))' \
+        || { echo "requirements/pre-commit.txt targets CPython 3.14; re-resolve it for $(python3 --version)" >&2; exit 1; } \
     && python3 -m venv /opt/pre-commit \
     && /opt/pre-commit/bin/pip install --no-cache-dir --require-hashes --no-deps --only-binary :all: \
         -r /tmp/install/pre-commit.txt \

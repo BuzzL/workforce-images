@@ -21,7 +21,9 @@ expect_version aws "aws-cli/${AWSCLI_VERSION}" "$(aws --version)"
 expect_version claude "${CLAUDE_CODE_VERSION}" "$(claude --version)"
 expect_version pre-commit "${PRE_COMMIT_VERSION}" "$(pre-commit --version)"
 /opt/pre-commit/bin/pip check >/dev/null || fail "pre-commit venv has inconsistent dependencies"
-echo "ok  pre-commit dependencies consistent"
+/opt/pre-commit/bin/python -c 'import cfgv, identify, nodeenv, virtualenv, yaml; assert yaml.__with_libyaml__' \
+  || fail "pre-commit dependencies do not import (or PyYAML lacks its C extension)"
+echo "ok  pre-commit dependencies consistent and importable"
 
 # System tools run.
 for tool in git jq make curl python3 npm; do
