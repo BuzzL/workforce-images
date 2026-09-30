@@ -1,0 +1,64 @@
+# Weekly: find newer versions of the ARG-pinned tools (scripts/bump_pins.py)
+# and open one PR per tool, as the workforce-agent App so the PR runs CI.
+# Every bump PR still needs the maintainer's approval to merge.
+name: Bump pins
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      min_age_days:
+        description: Only adopt releases at least this many days old
+        default: "7"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bump-pins
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.AGENT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Open one PR per bump
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          MIN_AGE_DAYS: ${{ inputs.min_age_days || '7' }}
+        run: |
+          git config user.name "buzzl-workforce-agent[bot]"
+          git config user.email "335405694+buzzl-workforce-agent[bot]@users.noreply.github.com"
+          python3 scripts/bump_pins.py --list --min-age-days "$MIN_AGE_DAYS" > bumps.txt
+          echo "Proposed bumps:"; cat bumps.txt
+          while read -r tool version; do
+            branch="deps/${tool}-${version}"
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+              echo "$branch already exists, skipping"
+              continue
+            fi
+            git switch --quiet --create "$branch" origin/main
+            python3 scripts/bump_pins.py --apply "$tool" --min-age-days "$MIN_AGE_DAYS"
+            git commit --quiet --all --message "build(deps): bump ${tool} to ${version}"
+            git push --quiet origin "$branch"
+            gh pr create --base main --head "$branch" \
+              --title "build(deps): bump ${tool} to ${version}" \
+              --body "Automated by \`scripts/bump_pins.py\` (weekly \`Bump pins\` workflow).
+
+          - The new version was released at least ${MIN_AGE_DAYS} days ago.
+          - The per-arch SHA256 values come from the vendor's checksum file, or from hashing the artifact when the vendor publishes none (AWS CLI). CPython has no hash ARG: uv verifies it.
+          - CI builds and smoke-tests both images on amd64 and arm64 with the new pin.
+          - Needs maintainer approval like any other PR."
+            git switch --quiet --detach origin/main
+          done < bumps.txt
