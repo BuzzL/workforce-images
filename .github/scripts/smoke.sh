@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Usage: smoke.sh <image> <dockerfile>...
 # Runs each Dockerfile's smoke test inside <image>, with the expected versions
-# taken from that Dockerfile's *_VERSION ARGs. Run from the repository root.
+# taken from that Dockerfile's *_VERSION ARGs. Run from the repository root,
+# with bash 4.4 or newer (mapfile).
 set -euo pipefail
 
+(( $# >= 2 )) || { echo "usage: $0 <image> <dockerfile>..." >&2; exit 2; }
 image=$1; shift
 env=() mounts=() cmds=()
 for dockerfile in "$@"; do

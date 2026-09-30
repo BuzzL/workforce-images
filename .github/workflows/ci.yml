@@ -36,6 +36,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/bump_pins.py --list --min-age-days 7
 
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # actionlint runs shellcheck on every run: block.
+      - name: Lint the publish and CI workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint .github/workflows/ci.yml .github/workflows/publish.yml
+          shellcheck .github/scripts/*.sh
+
   hadolint:
     runs-on: ubuntu-latest
     steps:
