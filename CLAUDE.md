@@ -41,6 +41,14 @@ Developer container images (base, python) for AI Workforce agents running on ECS
 - **Not automated:** pre-commit (bump it by hand together with `images/base/requirements/pre-commit.txt`), and the base image digest (Dependabot).
 - **Tests:** the `scripts` CI job runs the offline unit tests (`python3 -m unittest discover -s scripts`) plus a live `--list` dry run.
 
+## Publishing
+
+- `.github/workflows/publish.yml` runs on a `vX.Y.Z` tag. It refuses tags whose commit is not on `main` or has no green CI run, builds each image per arch on native runners, pushes by digest, and smoke-tests each pushed digest, then merges the digests into a multi-arch tag set (`X.Y.Z`, `X.Y`, `X`, `sha-<short>`, no `latest`; it refuses a version that is already published) on `ghcr.io/buzzl/workforce-images/<name>`.
+- Authentication is the workflow `GITHUB_TOKEN` (`packages: write` only on the push jobs). No PAT.
+- `python` is built `FROM` the just-published `base`, passed by digest through `BASE_IMAGE`.
+- The `verify` jobs pull each published digest anonymously (so they fail while a package is still private) and run `.github/scripts/smoke.sh`, the same runner CI uses.
+- New GHCR packages start private: the maintainer sets each package to public once, in the package settings.
+
 ## Consumers
 
 - **ECS agents**: `tini -g` handles reaping and forwards SIGTERM to the whole process group, so the task definition doesn't need `initProcessEnabled`.

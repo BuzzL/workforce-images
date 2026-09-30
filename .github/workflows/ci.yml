@@ -36,6 +36,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/bump_pins.py --list --min-age-days 7
 
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # actionlint runs shellcheck on every run: block.
+      - name: Lint the publish and CI workflows
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint .github/workflows/ci.yml .github/workflows/publish.yml
+          shellcheck .github/scripts/*.sh
+
   hadolint:
     runs-on: ubuntu-latest
     steps:
@@ -68,19 +79,5 @@ jobs:
         run: docker build --build-arg BASE_IMAGE=workforce-images/base:ci --tag workforce-images/python:ci images/python
       - name: Smoke test
         run: |
-          # smoke <image> <dockerfile>... : run each image's smoke test
-          # with the expected versions taken from the Dockerfiles' ARGs.
-          smoke() {
-            local image=$1; shift
-            local -a env=() mounts=() cmds=()
-            for dockerfile in "$@"; do
-              local dir; dir=$(dirname "$dockerfile"); local name; name=$(basename "$dir")
-              mapfile -t -O "${#env[@]}" env < <(sed -nE 's/^ARG ([A-Z_]+_VERSION)=(.+)$/--env=\1=\2/p' "$dockerfile")
-              mounts+=(-v "$PWD/$dir/smoke.sh:/smoke/$name.sh:ro")
-              cmds+=("bash /smoke/$name.sh")
-            done
-            local joined; joined=$(printf '%s && ' "${cmds[@]}")
-            docker run --rm "${env[@]}" "${mounts[@]}" "$image" bash -c "${joined% && }"
-          }
-          smoke workforce-images/base:ci images/base/Dockerfile
-          smoke workforce-images/python:ci images/base/Dockerfile images/python/Dockerfile
+          .github/scripts/smoke.sh workforce-images/base:ci images/base/Dockerfile
+          .github/scripts/smoke.sh workforce-images/python:ci images/base/Dockerfile images/python/Dockerfile
