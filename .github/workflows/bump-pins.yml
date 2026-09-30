@@ -22,6 +22,8 @@ concurrency:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    # The App key is an environment secret (main only), not a repo secret.
+    environment: agent-app
     steps:
       - uses: actions/create-github-app-token@v3
         id: app-token
