@@ -75,7 +75,7 @@ echo "ok  claude updates disabled"
 # Managed instructions state the branch naming rule and cannot be edited by dev.
 [[ "$(stat -c %u:%a /etc/claude-code/CLAUDE.md 2>/dev/null)" == 0:644 ]] \
   || fail "/etc/claude-code/CLAUDE.md is missing or is not root-owned mode 644"
-grep -qF 'feature/{ticket-id}-{short-summary}' /etc/claude-code/CLAUDE.md \
+grep -qF '<type>/{ticket-id}-{short-summary}' /etc/claude-code/CLAUDE.md \
   || fail "managed CLAUDE.md does not state the branch naming rule"
 echo "ok  managed CLAUDE.md with branch naming rule"
 
