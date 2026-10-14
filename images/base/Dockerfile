@@ -45,6 +45,7 @@ RUN apt-get update \
         less \
         make \
         openssh-client \
+        openssl \
         python3 \
         python3-venv \
         tini \
