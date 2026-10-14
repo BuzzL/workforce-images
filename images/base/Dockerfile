@@ -130,6 +130,12 @@ RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
 # loads (branch naming). Repos keep their own CLAUDE.md for the rest.
 COPY claude-code/CLAUDE.md /etc/claude-code/CLAUDE.md
 
+# Agent entrypoint: the command an ECS agent task runs to turn a tracker issue
+# into a pull request. Root-owned and on PATH, so dev can run it but not edit
+# it. It keeps the App key and the installation token out of logs and argv.
+COPY agent/entrypoint.sh /usr/local/bin/agent-entrypoint
+RUN chmod 0755 /usr/local/bin/agent-entrypoint
+
 # Unprivileged user (no sudo). Ubuntu ships a default "ubuntu" user on UID 1000.
 WORKDIR /
 RUN if id ubuntu >/dev/null 2>&1; then userdel --remove ubuntu; fi \

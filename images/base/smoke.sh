@@ -83,4 +83,60 @@ echo "ok  managed CLAUDE.md with branch naming rule"
 [[ "$(cat /proc/1/comm)" == tini ]] || fail "PID 1 is $(cat /proc/1/comm), expected tini"
 echo "ok  tini is PID 1"
 
+# Agent entrypoint: root-owned, on PATH, dev can run it but not edit it.
+entrypoint="$(command -v agent-entrypoint)" || fail "agent-entrypoint not on PATH"
+[[ "$(stat -c %u:%a "$entrypoint")" == 0:755 ]] \
+  || fail "agent-entrypoint is not root-owned mode 755"
+
+# A dry run turns an issue into a committed branch without pushing, and prints
+# neither the App private key nor the installation token. The run is hermetic:
+# a local bare repository stands in for the GitHub remote and a fake binary
+# stands in for Claude Code, so there is no network, no live App and no AWS.
+agent_tmp="$(mktemp -d)"
+trap 'rm -rf "$agent_tmp"' EXIT
+git -c init.defaultBranch=main init -q "$agent_tmp/src"
+git -C "$agent_tmp/src" -c user.name=t -c user.email=t@example.invalid \
+  commit -q --allow-empty -m "init"
+git clone -q --bare "$agent_tmp/src" "$agent_tmp/remote/target.git"
+
+cat >"$agent_tmp/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+# Stands in for Claude Code: makes a change instead of calling the model.
+printf 'change\n' >CHANGE.md
+FAKE
+chmod +x "$agent_tmp/fake-claude"
+
+# Sentinels for the secrets the entrypoint handles. They are set in the
+# environment (so the entrypoint sees them) but must never reach its output.
+agent_token="tok-SENTINELtokenDONOTPRINT"
+agent_key="-----BEGIN PRIVATE KEY-----SENTINELkeyDONOTPRINT-----END PRIVATE KEY-----"
+
+agent_out="$(
+  AGENT_ISSUE=IAT-0 \
+    AGENT_ISSUE_TITLE="Smoke Test Change" \
+    AGENT_REPO=target \
+    AGENT_DRY_RUN=1 \
+    AGENT_INSTALLATION_TOKEN="$agent_token" \
+    AGENT_APP_PRIVATE_KEY="$agent_key" \
+    AGENT_APP_CLIENT_ID="sentinel-client-id" \
+    AGENT_CLAUDE_BIN="$agent_tmp/fake-claude" \
+    AGENT_CLAUDE_ARGS= \
+    GITHUB_SERVER_URL="file://$agent_tmp/remote" \
+    AGENT_WORKDIR="$agent_tmp/clone" \
+    agent-entrypoint 2>&1
+)" || fail "agent-entrypoint dry run failed:"$'\n'"$agent_out"
+
+git -C "$agent_tmp/clone" rev-parse --verify -q feature/iat-0-smoke-test-change >/dev/null \
+  || fail "dry run did not create the expected branch"
+[[ -f "$agent_tmp/clone/CHANGE.md" ]] || fail "dry run did not run the worker"
+git -C "$agent_tmp/clone" log -1 --pretty=%an | grep -qF 'devworkforce[bot]' \
+  || fail "dry run did not commit as the bot"
+printf '%s' "$agent_out" | grep -q 'not pushing' \
+  || fail "dry run did not report that it skipped the push"
+
+# The graded requirement: no secret in anything the entrypoint printed.
+! printf '%s' "$agent_out" | grep -qF "$agent_token" || fail "installation token leaked to output"
+! printf '%s' "$agent_out" | grep -qF SENTINELkey || fail "App private key leaked to output"
+echo "ok  agent-entrypoint dry run: branch + commit, no secret printed"
+
 echo "base: ok"
