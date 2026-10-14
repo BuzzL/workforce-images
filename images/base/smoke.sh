@@ -47,7 +47,7 @@ echo "ok  user dev (1000:1000), no sudo, system paths read-only"
 npm install --global --silent --no-audit --no-fund is-number@7.0.0
 [[ -f "$HOME/.npm-global/lib/node_modules/is-number/package.json" ]] \
   || fail "npm -g did not install into ~/.npm-global"
-[[ ":$PATH:" == *":$HOME/.npm-global/bin:"* ]] || fail "~/.npm-global/bin not on PATH"
+[[ ":$PATH:" == *":$HOME/.npm-global/bin:"* ]] || fail "\$HOME/.npm-global/bin not on PATH"
 # User-writable bin dirs come after every system dir, so they cannot shadow
 # system tools.
 [[ -n "$HOME" && "$HOME" != / ]] || fail "HOME must be a real directory, got '$HOME'"
@@ -82,5 +82,135 @@ echo "ok  managed CLAUDE.md with branch naming rule"
 # tini is PID 1.
 [[ "$(cat /proc/1/comm)" == tini ]] || fail "PID 1 is $(cat /proc/1/comm), expected tini"
 echo "ok  tini is PID 1"
+
+# Agent entrypoint: root-owned, on PATH, dev can run it but not edit it.
+entrypoint="$(command -v agent-entrypoint)" || fail "agent-entrypoint not on PATH"
+[[ "$(stat -c %u:%a "$entrypoint")" == 0:755 ]] \
+  || fail "agent-entrypoint is not root-owned mode 755"
+
+# A dry run turns an issue into a committed branch without pushing, and prints
+# neither the App private key nor the installation token. The run is hermetic:
+# a local bare repository stands in for the GitHub remote and a fake binary
+# stands in for Claude Code, so there is no network, no live App and no AWS.
+agent_tmp="$(mktemp -d)"
+trap 'rm -rf "$agent_tmp"' EXIT
+git -c init.defaultBranch=main init -q "$agent_tmp/src"
+git -C "$agent_tmp/src" -c user.name=t -c user.email=t@example.invalid \
+  commit -q --allow-empty -m "init"
+git clone -q --bare "$agent_tmp/src" "$agent_tmp/remote/target.git"
+
+cat >"$agent_tmp/fake-claude" <<'FAKE'
+#!/usr/bin/env bash
+# Stands in for Claude Code. The worker is untrusted, so it must run with none
+# of the secrets in its environment: it refuses if it can see any, then makes a
+# change. This is what turns "the worker cannot read the secrets" into a check.
+for secret in AGENT_APP_PRIVATE_KEY AGENT_APP_PRIVATE_KEY_FILE AGENT_INSTALLATION_TOKEN GH_TOKEN; do
+  if [[ -n "${!secret:-}" ]]; then
+    echo "worker was given secret in environment: $secret" >&2
+    exit 97
+  fi
+done
+printf 'change\n' >CHANGE.md
+FAKE
+chmod +x "$agent_tmp/fake-claude"
+
+# Sentinels for the secrets the entrypoint handles. They are set in the
+# environment (so the entrypoint sees them) but must never reach its output.
+agent_token="tok-SENTINELtokenDONOTPRINT"
+agent_key="-----BEGIN PRIVATE KEY-----SENTINELkeyDONOTPRINT-----END PRIVATE KEY-----"
+
+agent_out="$(
+  AGENT_ISSUE=IAT-0 \
+    AGENT_ISSUE_TITLE="Smoke Test Change" \
+    AGENT_REPO=target \
+    AGENT_DRY_RUN=1 \
+    AGENT_INSTALLATION_TOKEN="$agent_token" \
+    AGENT_APP_PRIVATE_KEY="$agent_key" \
+    AGENT_APP_CLIENT_ID="sentinel-client-id" \
+    AGENT_CLAUDE_BIN="$agent_tmp/fake-claude" \
+    AGENT_CLAUDE_ARGS='' \
+    GITHUB_SERVER_URL="file://$agent_tmp/remote" \
+    AGENT_WORKDIR="$agent_tmp/clone" \
+    agent-entrypoint 2>&1
+)" || fail "agent-entrypoint dry run failed:"$'\n'"$agent_out"
+
+git -C "$agent_tmp/clone" rev-parse --verify -q feature/iat-0-smoke-test-change >/dev/null \
+  || fail "dry run did not create the expected branch"
+[[ -f "$agent_tmp/clone/CHANGE.md" ]] || fail "dry run did not run the worker"
+git -C "$agent_tmp/clone" log -1 --pretty=%an | grep -qF 'devworkforce[bot]' \
+  || fail "dry run did not commit as the bot"
+printf '%s' "$agent_out" | grep -q 'not pushing' \
+  || fail "dry run did not report that it skipped the push"
+
+# The graded requirement: no secret in anything the entrypoint printed.
+! printf '%s' "$agent_out" | grep -qF "$agent_token" || fail "installation token leaked to output"
+! printf '%s' "$agent_out" | grep -qF SENTINELkey || fail "App private key leaked to output"
+echo "ok  agent-entrypoint dry run: branch + commit, no secret printed"
+
+# A second hermetic dry run exercises the token-minting path itself -- openssl,
+# the JWT and the 0600 temp key file -- which the run above skips by supplying
+# AGENT_INSTALLATION_TOKEN. The GitHub API is stubbed and a throwaway RSA key is
+# generated locally, so the run stays network-free, with no live App and no AWS.
+mint_minted_token="tok-MINTEDsentinelDONOTPRINT"
+real_openssl="$(command -v openssl)" || fail "openssl not found in the image"
+"$real_openssl" genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+  -out "$agent_tmp/throwaway.pem" 2>/dev/null \
+  || fail "could not generate a throwaway RSA key"
+
+mkdir -p "$agent_tmp/stub"
+# Stub the GitHub API: the installation lookup, then the token mint.
+cat >"$agent_tmp/stub/curl" <<CURL
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  case "\$arg" in
+    */access_tokens) printf '{"token":"%s"}\n' "$mint_minted_token"; exit 0 ;;
+    */installation)  printf '{"id":4242}\n'; exit 0 ;;
+  esac
+done
+printf '{}\n'
+CURL
+# Wrap openssl: when it is used to sign, record the key file's mode and path so
+# the test can assert 0600 and later removal, then defer to the real tool.
+cat >"$agent_tmp/stub/openssl" <<OPENSSL
+#!/usr/bin/env bash
+prev=
+for arg in "\$@"; do
+  if [[ "\$prev" == -sign ]]; then
+    stat -c '%a' "\$arg" >"$agent_tmp/keymode" 2>/dev/null || true
+    printf '%s\n' "\$arg" >"$agent_tmp/keypath"
+  fi
+  prev=\$arg
+done
+exec "$real_openssl" "\$@"
+OPENSSL
+chmod +x "$agent_tmp/stub/curl" "$agent_tmp/stub/openssl"
+
+mint_out="$(
+  PATH="$agent_tmp/stub:$PATH" \
+    AGENT_ISSUE=ABC-123 \
+    AGENT_ISSUE_TITLE="Mint Path Change" \
+    AGENT_REPO=target \
+    AGENT_APP_OWNER=target \
+    AGENT_DRY_RUN=1 \
+    AGENT_APP_CLIENT_ID="sentinel-client-id" \
+    AGENT_APP_PRIVATE_KEY_FILE="$agent_tmp/throwaway.pem" \
+    AGENT_CLAUDE_BIN="$agent_tmp/fake-claude" \
+    AGENT_CLAUDE_ARGS='' \
+    GITHUB_SERVER_URL="file://$agent_tmp/remote" \
+    GITHUB_API_URL="https://api.github.invalid" \
+    AGENT_WORKDIR="$agent_tmp/clone-mint" \
+    agent-entrypoint 2>&1
+)" || fail "agent-entrypoint mint dry run failed:"$'\n'"$mint_out"
+
+printf '%s' "$mint_out" | grep -q 'minting installation token' \
+  || fail "the mint path was not exercised"
+[[ "$(cat "$agent_tmp/keymode" 2>/dev/null)" == 600 ]] \
+  || fail "temp key file was not mode 0600 at signing (got '$(cat "$agent_tmp/keymode" 2>/dev/null)')"
+key_file_used="$(cat "$agent_tmp/keypath" 2>/dev/null)"
+[[ -n "$key_file_used" ]] || fail "the openssl signing step did not run"
+[[ ! -e "$key_file_used" ]] || fail "temp key file was left on disk: $key_file_used"
+! printf '%s' "$mint_out" | grep -qF "$mint_minted_token" || fail "minted token leaked to output"
+! printf '%s' "$mint_out" | grep -q 'PRIVATE KEY' || fail "a private key leaked to output"
+echo "ok  agent-entrypoint mint path: 0600 temp key removed, no key or token printed"
 
 echo "base: ok"
