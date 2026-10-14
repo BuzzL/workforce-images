@@ -18,6 +18,7 @@ Developer container images (base, python) for AI Workforce agents running on ECS
   - Runs as the unprivileged user `dev` (UID/GID 1000) with **no sudo**.
   - `npm -g` installs to `~/.npm-global`, which comes **last** on PATH so it can't shadow system tools.
   - Claude Code cannot update itself, neither in the background nor with `claude update`. `DISABLE_AUTOUPDATER` and `DISABLE_UPDATES` are set both as env vars and in root-owned `/etc/claude-code/managed-settings.json`, which wins over any environment override.
+  - `/usr/local/bin/agent-entrypoint` (source `images/base/agent/entrypoint.sh`, root-owned) is what an ECS agent task runs: it mints a GitHub App installation token, clones the target repo, creates the branch, runs Claude Code on the issue and commits as the bot, then pushes and opens the PR — all via `AGENT_*` env inputs. `AGENT_DRY_RUN=1` does everything except push and PR. The App key and the token never reach argv, the remote URL or any log line; the base smoke test runs the dry-run and asserts no secret is printed.
 - `images/python`: FROM base (`BASE_IMAGE` build arg, **no default**, so a build never resolves a name on Docker Hub). It adds:
   - uv and ruff as prebuilt binaries in `/usr/local/bin`
   - a uv-managed CPython, root-owned under `/opt/uv/python` and linked as `python`, `python3` and `python3.X` in `/usr/local/bin`, ahead of Ubuntu's `/usr/bin/python3`
